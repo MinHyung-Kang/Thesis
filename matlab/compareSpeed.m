@@ -8,8 +8,8 @@ maxTrial = 1;% How many trials we want to average over
 adverIter = 10;
 MOpts = [10,20,50,100,200,250,500,750,1000];
 %mOpts = round(MOpts/5);
-mopts = ones(1,optNum) * 5; 
 optNum = length(MOpts);
+mOpts = ones(1,optNum) * 5; 
 algNames = {'SVGD','Random Subset', 'Random Subset + Control Functional', ...
 'Induced Points', 'Adversarial Induced Points'};
 % Score function (simplest possible)
@@ -77,7 +77,7 @@ set(gca,'XtickLabel',{'10','50','250'});
 leg1 = legend(handles, algNames, 'Orientation','vertical','Location','NorthWest');
 %set(leg1, 'Position',[0.8 0.5 0.05 0.05]);
 %%
-axis off;
-leg1 = 
+%axis off;
+%leg1 = 
 %set(leg1, 'Position',[0.7 0.3 0 0]);
 

@@ -51,7 +51,7 @@ if strcmp(method,'none') % Induced Kernel Method
     dxKxy = (dxKxy + x .* repmat(sumKxy,1,d)) / h2;
     Akxy = (Kxy * Sqx  + dxKxy)/n;
 
-elseif contains(method,'subset') % Subset method
+elseif ~isempty(strfind(method,'subset')) % Subset method
     mInd  = randsample(n,m);
     y = x(mInd,:);
     y2 = x2(mInd);
@@ -70,7 +70,7 @@ elseif contains(method,'subset') % Subset method
     Sqy = dlog_p(y);
 
     % Peform control functional if specified
-    if contains(method,'CF') == 1
+    if ~isempty(strfind(method,'CF'))
         sqxdy = -(Sqy*y' - repmat(sum((Sqy.*y),2),1,m))./h2;
         dxsqy = sqxdy';
         dxdy = (-H(mInd,:)/(h2^2) + d/h2);
@@ -89,11 +89,11 @@ elseif contains(method,'subset') % Subset method
     dxKxy = (dxKxy + x .* repmat(sumKxy,1,d)) / h2;
     Akxy = (Kxy * Sqy  + dxKxy);
 
-    if contains(method,'CF') == 0
+    if ~isempty(strfind(method,'CF'))
         Akxy = Akxy / m;
     end
 
-elseif contains(method,'inducedPoints') % Induced Points method
+elseif ~isempty(strfind(method,'inducedPoints'))% Induced Points method
     if isfield(kernel_opts, 'Y')
         y = kernel_opts.Y;
         y2 = sum(y.^2, 2);
