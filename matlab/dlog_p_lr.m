@@ -1,9 +1,9 @@
-function dlog_p = dlog_p_lr(theta, X, Y, batchsize, a0, b0)
+function dlog_p = dlog_p_lr(theta, X, Y, batchsize, seed, a0, b0)
 %%%%%%%
-% Output: First order derivative of Bayesian logistic regression. 
-        
-% The inference is applied on posterior p(theta|X, Y) with theta = [w, log(alpha)], 
-% where p(theta|X, Y) is the bayesian logistic regression 
+% Output: First order derivative of Bayesian logistic regression.
+
+% The inference is applied on posterior p(theta|X, Y) with theta = [w, log(alpha)],
+% where p(theta|X, Y) is the bayesian logistic regression
 % We use the same settings as http://icml.cc/2012/papers/360.pdf
 
 % When the number of observations is very huge, computing the derivative of
@@ -15,14 +15,18 @@ function dlog_p = dlog_p_lr(theta, X, Y, batchsize, a0, b0)
 %   -- X, Y: observations, where X is the feature matrix and Y contains
 %   target label
 %   -- batchsize, sub-sampling size of each batch;batchsize = -1, calculating the derivative exactly
+%   -- seed : to fix the batch
 %   -- a0, b0: hyper-parameters
 %%%%%%%
 
 [N, ~] = size(X);  % N is the number of total observations
 
 if nargin < 4; batchsize = min(N, 100); end % default batch size 100
-if nargin < 4; a0 = 1; end
-if nargin < 5; b0 = 1; end
+if nargin < 6; a0 = 1; end
+if nargin < 7; b0 = 1; end
+
+% Set seed so that we get the same dlog_p_lr
+if nargin >= 5; rng(seed); end
 
 if batchsize  > 0
     ridx = randperm(N, batchsize);
@@ -42,7 +46,6 @@ dw = dw_data * N /size(X,1) + dw_prior; %re-scale
 
 dalpha = D/2 - wt + (a0-1) - b0.*alpha + 1;  %the last term is the jacobian term
 
-dlog_p = [dw, dalpha]; % first order derivative 
+dlog_p = [dw, dalpha]; % first order derivative
 
 end
-

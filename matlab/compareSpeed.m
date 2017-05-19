@@ -3,10 +3,10 @@
 
 fudge_factor = 1e-6;
 
-maxIter = 1;  % maximum iteration times
-maxTrial = 1;% How many trials we want to average over
+maxIter = 1000;  % maximum iteration times
+maxTrial = 10;% How many trials we want to average over
 adverIter = 10;
-MOpts = [10,20,50,100,200,250,500,750,1000];
+MOpts = [10,20,50,100,200,250,500,750,1000,1500,2000,2500,5000];
 %mOpts = round(MOpts/5);
 optNum = length(MOpts);
 mOpts = ones(1,optNum) * 5; 
@@ -20,7 +20,7 @@ dlog_p = @(X)(X);
 
 baseModel = getModel('none',-1);                                   % Base Model
 
-t_vals = zeros(6, optNum);
+t_vals = zeros(5, optNum);
 
 for mInd = 1:optNum
     M = MOpts(mInd);
@@ -48,6 +48,10 @@ for mInd = 1:optNum
             theta = svgd(theta0, dlog_p, maxIter, modelOpt);
             timePassed = toc(timeStart);
             t_vals(modelInd, mInd) = t_vals(modelInd, mInd) + timePassed/maxTrial;
+
+		save('t_vals.mat','t_vals');
+        	indices = [mInd, trialInd, modelInd];
+        	save('indices.mat','indices');
         end
 
     end
@@ -60,20 +64,21 @@ colOpts = {'h-','o-','*-','.-','x-','s-','d-','^-','v-','p-','h-','>-','<-'};
 titleNames = {'Total Time'};
 yLabels = {'log10 t'};
 
-MOptsTxt = {'10','20','50','100','200','250','500','750','1000'};
+MOptsTxt = ['10','20','50','100','200','250','500','750','1000','1500','2000'];
+%MOptsTxt = {'10','20','50','100','200','250','500','750','1000'};
 numModels = 5;
 
 
 handles = zeros(1, numModels);
 for i = 1:numModels
-    handles(i) = semilogy(1:optNum, t_vals(i,:),colOpts{i});
+    handles(i) = semilogy(1:optNum, t_vals(i,1:optNum),colOpts{i});
     hold on;
 end
 title(sprintf('%s',titleNames{1}));
 xlabel('Sample Size (N)');
 ylabel(yLabels{1});
-set(gca,'Xtick',[1 4 9]);
-set(gca,'XtickLabel',{'10','50','250'});
+set(gca,'Xtick',[1 4 7 9 11]);
+set(gca,'XtickLabel',{'10','100','500', '1000', '2000'});
 leg1 = legend(handles, algNames, 'Orientation','vertical','Location','NorthWest');
 %set(leg1, 'Position',[0.8 0.5 0.05 0.05]);
 %%

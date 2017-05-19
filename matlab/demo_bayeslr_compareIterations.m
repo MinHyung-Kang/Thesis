@@ -5,7 +5,7 @@ clear
 % Implemented from Liu, Q. and Wang, D. (2016) Stein Variational Gradient Descent
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-M = 200; % number of particles
+M = 100; % number of particles
 
 % we partition the data into 80% for training and 20% for testing
 train_ratio = 0.8;
@@ -28,11 +28,11 @@ n_train = length(train_idx); n_test = length(test_idx);
 batchsize = 100; % subsampled mini-batch size
 a0 = 1; b0 = .01; % hyper-parameters
 
-dlog_p  = @(theta)dlog_p_lr(theta, X_train, y_train); % returns the first order derivative of the posterior distribution
+dlog_p  = @(theta,seed)dlog_p_lr(theta, X_train, y_train,batchsize,seed,a0,b0); % returns the first order derivative of the posterior distribution
 
 
 %% Define models
-m = 40;
+m = 20;
 adverIter = 5;
 
 % Common options
@@ -54,14 +54,14 @@ inducedAdverModel_justReg2 = getModel('inducedPoints',-1, m,3,adverIter,0.2,fals
 inducedAdverModel_justReg3 = getModel('inducedPoints',-1, m,3,adverIter,0.05,false);
 
 %% Compare options
-maxIter = 4000;  % maximum iteration times
+maxIter = 3000;  % maximum iteration times
 numTimeSteps = 10; % How many timesteps we want to shows
-maxTrial = 20;% How many trials we want to average over
+maxTrial = 5;% How many trials we want to average over
 
 timeStepUnit = maxIter / numTimeSteps;
 %1. Compare subset models
-modelOpts = {baseModel, subsetModel, subsetCFModel};
-algNames= {'Base','subset','subset(CF)'};
+% modelOpts = {baseModel, subsetModel, subsetCFModel};
+% algNames= {'Base','subset','subset(CF)'};
 
 %modelOpts = {baseModel, inducedModel, inducedAdverModel_basic,inducedAdverModel};
 %algNames= {'Base','inducedPoints(basic)','inducedPoints(Adverse)','inducedPoints(Adverse-uStat/reg=0.1)'};
@@ -72,7 +72,12 @@ algNames= {'Base','subset','subset(CF)'};
 % inducedAdverModel5 = getModel('inducedPoints',-1, m,3,5,0.1,false);   % Induced Points - update y,h
 % inducedAdverModel10 = getModel('inducedPoints',-1, m,3,10,0.1,false);   % Induced Points - update y,h
 % modelOpts = {baseModel, inducedModel,inducedAdverModel5, inducedAdverModel10};
-% algNames= {'base','IP','AIP(5 iter)','AIP(10 iter)'};
+% algNames= {'base','IP','AIP(10 iter)','AIP(50 iter)'};
+
+inducedAdverModel20 = getModel('inducedPoints',-1, m,3,20,0.1,true);   % Induced Points - update y,h
+modelOpts = {baseModel, inducedModel,inducedAdverModel20};
+algNames= {'base','IP','AIP(20 iter-only hupdate,uStat,reg)'};
+
 
 numModels = length(modelOpts);   % How many models we want to try
 
@@ -90,9 +95,12 @@ for trialInd = 1:maxTrial
         theta0(i,:) = [normrnd(0, sqrt((1/alpha0(i))), 1, d), log(alpha0(i))]; % w and log(alpha)
     end
 
+    currentSeed = trialInd;
+
     for modelInd = 1:numModels
         theta = theta0;
         modelOpt = modelOpts{modelInd};
+        modelOpt.currentSeed = currentSeed;
 
         gradInfo.historical_grad = 0;
         gradInfo.y_historical_grad = 0;
@@ -109,6 +117,7 @@ for trialInd = 1:maxTrial
         for iter = 1:maxIter
             % Get update
             timeStart = tic;
+            modelOpt.nextSeed = trialInd * maxIter + iter;
             [theta, gradInfo, modelOpt] = svgd_singleIteration(theta, dlog_p, gradInfo, modelOpt);
             timePassed = timePassed + toc(timeStart);
 

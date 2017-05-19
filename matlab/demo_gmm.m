@@ -18,7 +18,7 @@ true_xsq = 5;
 gmm_model = gmdistribution(mu, sigma, w);
 
 % Score function
-dlog_p = @(X)getGradGMM(gmm_model, p_params, X);
+dlog_p = @(X, seed)getGradGMM(gmm_model, p_params, X);
 % Evaluation function
 evalPerformance = @(points)evalPoints(points, true_x, true_xsq);
 
@@ -27,48 +27,60 @@ evalPerformance = @(points)evalPoints(points, true_x, true_xsq);
 fudge_factor = 1e-6;
 
 maxIter = 1000;  % maximum iteration times
-maxTrial = 20;% How many trials we want to average over
+maxTrial = 1;% How many trials we want to average over
 adverIter = 10;
 MOpts = [10,20,30,50,80,100,150,200,250];
-mOpts = round(MOpts/5);
 optNum = length(MOpts);
+mOpts = [5 ones(1,4) * 10  ones(1,4) * 20];
+%mOpts2 = round(MOpts/4);
+%mOpts2 = ones(1,9)*10;
+mOpts2 = MOpts/5;
+mOpts = mOpts2;
 algNames = {'SVGD','Random Subset', 'Random Subset + Control Functional', ...
-'Induced Points', 'Adversarial Induced Points', 'Monte Carlo'};
+    'Induced Points', 'Adversarial Induced Points (10 updates)', 'Monte Carlo'};
+%    'Induced Points', 'Monte Carlo'};
+
+numModels = length(algNames);
 
 %% Run iterations
 
 baseModel = getModel('none',-1);                                   % Base Model
 
-mse_x = zeros(6,optNum);
-mse_xsq = zeros(6,optNum);
-t_vals = zeros(6, optNum);
+mse_x = zeros(numModels,optNum);
+mse_xsq = zeros(numModels,optNum);
+t_vals = zeros(numModels, optNum);
 
 for mInd = 1:optNum
     M = MOpts(mInd);
-    m = mOpts(mInd);
+    m = mOpts(mInd); m2 = mOpts2(mInd);
 
     % Redefine all the models for given m
     subsetModel = getModel('subset',-1, m);                            % Random Subset
     subsetCFModel = getModel('subsetCF',-1, m);                        % Random Subset (CF)
-    inducedModel = getModel('inducedPoints',-1, m,0,-1,0,false);       % Induced Points
-    inducedAdverModel = getModel('inducedPoints',-1, m,3,adverIter,0.1,true);   % Induced Points - update y,h
+    inducedModel = getModel('inducedPoints',-1, m2,0,-1,0,false);       % Induced Points
+    inducedAdverModel = getModel('inducedPoints',-1, m2,3,adverIter,0.1,true);   % Induced Points - update y,h
 
     modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel, inducedAdverModel, 'MonteCarlo'};
+    %modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel, 'MonteCarlo'};
 
     for trialInd = 1:maxTrial
         % Common starting parameter
-        theta0 = normrnd(0,1,M,1);
+        %theta0 = normrnd(0,1,M,1);
+       % theta0 = normrnd(-10,1,M,1);
+        theta0 = unifrnd(-4,4,M,1);
 
         for modelInd = 1:length(modelOpts)
             fprintf('Evaluating : (M=%d) Trial (%d/%d) Model : %s \n',...
                 M, trialInd, maxTrial, algNames{modelInd});
-            
+
             modelOpt = modelOpts{modelInd};
+            
             % Get update
             timeStart = tic;
             if modelInd == length(modelOpts)
                 theta = random(gmm_model, M);
             else
+                modelOpt.baseSeed = trialInd * maxIter;
                 theta = svgd(theta0, dlog_p, maxIter, modelOpt);
             end
             timePassed = toc(timeStart);
@@ -92,7 +104,7 @@ titleNames = {'Total Time', 'Estimating x', 'Estimating x^2'};
 yLabels = {'log10 t', 'log10 MSE', 'log10 MSE'};
 
 MOptsTxt = {'10','20','30','50','80','100','150','200','250'};
-numModels = 6;
+
 
 for j = 1:3
     subplot(1,4,j);

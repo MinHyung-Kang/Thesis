@@ -80,6 +80,7 @@ elseif ~isempty(strfind(method,'subset')) % Subset method
 
         weights = getWeights(KpMat);
         info.w = weights;
+        info.y = y;
 
         Kxy = Kxy .* repmat(weights,n,1);
     end
@@ -144,6 +145,7 @@ function [weights] = getWeights(kpmat)
 
     % Normalize weights? but they are negative and don't add up to 1
     weights = weights ./ sum(weights,2);
+    %weights = abs(weights) ./ sum(abs(weights),2);
 end
 
 % Given a kernel matrix K, let lambda be smallest power of 10 such that

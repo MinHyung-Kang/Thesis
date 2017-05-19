@@ -502,82 +502,108 @@ if __name__ == '__main__':
 
     np.random.seed(1)
     ''' load data file '''
-    data = np.loadtxt('../data/boston_housing')
 
-    # Please make sure that the last column is the label and the other columns are features
-    X_input = data[ :, range(data.shape[ 1 ] - 1) ]
-    y_input = data[ :, data.shape[ 1 ] - 1 ]
+    for dataInd in range(3,4):
+        if dataInd == 0:
+            data = np.loadtxt('../data/boston_housing')
+            datasetName = 'Boston Housing'
+        elif dataInd == 1:
+            data = np.loadtxt(open("../data/Concrete.csv", "rb"), delimiter=",", skiprows=1) # Concrete
+            datasetName = 'Concrete'
+        elif dataInd == 2:
+            data = np.loadtxt(open("../data/Energy.csv", "rb"), delimiter=",", skiprows=1) # Energy
+            datasetName = 'Energy'
+        elif dataInd == 3:
+            data = np.loadtxt(open("../data/kin8nm.csv", "rb"), delimiter=",", skiprows=0) # Kin8nm Dataset
+            datasetName = 'Kin8nm'
+        print('-------------------',datasetName,'-------------------')
 
-    ''' build the training and testing data set'''
-    train_ratio = 0.9 # We create the train and test sets with 90% and 10% of the data
-    permutation = np.arange(X_input.shape[0])
-    random.shuffle(permutation)
+        if dataInd == 2:
+            X_input = data[ :, range(data.shape[ 1 ] - 2) ]
+            y_input = data[ :, data.shape[ 1 ] - 2 ]
+        else:
+            # Please make sure that the last column is the label and the other columns are features
+            X_input = data[ :, range(data.shape[ 1 ] - 1) ]
+            y_input = data[ :, data.shape[ 1 ] - 1 ]
 
-    size_train = int(np.round(X_input.shape[ 0 ] * train_ratio))
-    index_train = permutation[ 0 : size_train]
-    index_test = permutation[ size_train : ]
+        ''' build the training and testing data set'''
+        train_ratio = 0.9 # We create the train and test sets with 90% and 10% of the data
+        permutation = np.arange(X_input.shape[0])
+        random.shuffle(permutation)
 
-    X_train, y_train = X_input[ index_train, : ], y_input[ index_train ]
-    X_test, y_test = X_input[ index_test, : ], y_input[ index_test ]
+        size_train = int(np.round(X_input.shape[ 0 ] * train_ratio))
+        index_train = permutation[ 0 : size_train]
+        index_test = permutation[ size_train : ]
 
-    names = ['Base','Subset','Subset-CF','Induced Points','Adversarial IP'];
-    numIter = 20
-    modelNum = len(names);
-    svgd_time_final = np.zeros((modelNum, numIter))
-    svgd_rmse_final = np.zeros((modelNum, numIter))
-    svgd_ll_final = np.zeros((modelNum, numIter))
+        X_train, y_train = X_input[ index_train, : ], y_input[ index_train ]
+        X_test, y_test = X_input[ index_test, : ], y_input[ index_test ]
 
-    ''' Training Bayesian neural network with SVGD '''
-    #batch_size, n_hidden, max_iter, numParticles = 100, 50, 2000, 30  # max_iter is a trade-off between running time and performance
-    batch_size, n_hidden, max_iter, numParticles = 100, 50, 2000, 30  # max_iter is a trade-off between running time and performance
-    m, adverMaxIter = int(numParticles/2),5
+        #names = ['Base','Subset','Subset-CF','Induced Points','Adversarial IP'];
+        #names = ['Base','Subset','Subset-CF','Induced Points'];
+        names = ['Base','Subset','Subset-CF'];
+        numIter = 20
+        modelNum = len(names);
+        svgd_time_final = np.zeros((modelNum, numIter))
+        svgd_rmse_final = np.zeros((modelNum, numIter))
+        svgd_ll_final = np.zeros((modelNum, numIter))
 
-    np.set_printoptions(precision=4)
-    for modelInd in range(0,modelNum):
-        for t in range(0,numIter):
-            np.random.seed(t)
-            print(names[modelInd], ': Iteration ', t+1, '/', numIter)
-            start = time.time()
+        ''' Training Bayesian neural network with SVGD '''
+        #batch_size, n_hidden, max_iter, numParticles = 100, 50, 2000, 30  # max_iter is a trade-off between running time and performance
+        batch_size, n_hidden, max_iter, numParticles = 100, 50, 2000, 20  # max_iter is a trade-off between running time and performance
+        max_iterRS = 2750
+        max_iterRSCF = 2750
+        max_iterIP = 2500
+        m, adverMaxIter = int(2*numParticles/4),5
+        max_iters = [max_iter, max_iterRS, max_iterRSCF, max_iterIP];
 
-            if modelInd == 0 :# base
-                svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iter,
-                    method = 'none')
-            elif modelInd == 1 : # Subset
-                svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iter,
-                    method = 'subparticles',m=m,cf=False)
-            elif modelInd == 2 : # Subset (CF)
-                svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iter,
-                    method = 'subparticles',m=m,cf=True)
-            elif modelInd == 3 : # Induced Points
-                svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iter,
-                    method = 'inducedPoints',m=m, uStat = True, adver=False)
-            elif modelInd == 4 : # Induced Points (Adver)
-                svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iter,
-                    method = 'inducedPoints',m=m, uStat = True, adver=True, adverMaxIter = adverMaxIter)
+        np.set_printoptions(precision=4)
+        for modelInd in range(0,modelNum):
+            for t in range(0,numIter):
+                np.random.seed(t)
+                print(names[modelInd], ': Iteration ', t+1, '/', numIter)
+                start = time.time()
 
-            svgd_time = time.time() - start
-            svgd_rmse, svgd_ll = svgd.evaluation(X_test, y_test)
-            svgd_time_final[modelInd, t] = svgd_time
-            svgd_rmse_final[modelInd, t] = svgd_rmse
-            print(svgd_rmse,'\n')
-            svgd_ll_final[modelInd, t] = svgd_ll
+                if modelInd == 0 :# base
+                    svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iter,
+                        method = 'none')
+                elif modelInd == 1 : # Subset
+                    svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iterRS,
+                        method = 'subparticles',m=m,cf=False)
+                elif modelInd == 2 : # Subset (CF)
+                    svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iterRSCF,
+                        method = 'subparticles',m=m,cf=True)
+                elif modelInd == 3 : # Induced Points
+                    svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iterIP,
+                        method = 'inducedPoints',m=m, uStat = True, adver=False)
+                elif modelInd == 4 : # Induced Points (Adver)
+                    svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iter,
+                        method = 'inducedPoints',m=m, uStat = True, adver=True, adverMaxIter = adverMaxIter)
+
+                svgd_time = time.time() - start
+                svgd_rmse, svgd_ll = svgd.evaluation(X_test, y_test)
+                svgd_time_final[modelInd, t] = svgd_time
+                svgd_rmse_final[modelInd, t] = svgd_rmse
+                print(svgd_rmse,'\n')
+                svgd_ll_final[modelInd, t] = svgd_ll
+            '''
+            print('--------------------------------------------------------------------------------')
+            print('Dataset : ', datasetName)
+            print('[Options] : M=',numParticles, ', m=',m, ', max_iter=', max_iter, ', n_hidden=',n_hidden, ', batch_size=',batch_size)
+            print('--------------------------------------------------------------------------------')
+
+            print (names[modelInd],' [Average of', numIter, 'runs] : ', max_iter, ' iterations')
+            print ('[rmse] Mean : ', "%.4f" % np.mean(svgd_rmse_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_rmse_final[modelInd,]) )
+            print ('[llik] Mean : ', "%.4f" % np.mean(svgd_ll_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_ll_final[modelInd,]) )
+            print ('[time] Mean : ', "%.2f" % np.mean(svgd_time_final[modelInd,]), ' st.dev : ', "%.2f" % np.std(svgd_time_final[modelInd,]), '\n')
+            print('--------------------------------------------------------------------------------')
+            '''
 
         print('--------------------------------------------------------------------------------')
+        print('Dataset : ', datasetName)
         print('[Options] : M=',numParticles, ', m=',m, ', max_iter=', max_iter, ', n_hidden=',n_hidden, ', batch_size=',batch_size)
         print('--------------------------------------------------------------------------------')
-
-        print (names[modelInd],' [Average of', numIter, 'runs] : ', max_iter, ' iterations')
-        print ('[rmse] Mean : ', "%.4f" % np.mean(svgd_rmse_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_rmse_final[modelInd,]) )
-        print ('[llik] Mean : ', "%.4f" % np.mean(svgd_ll_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_ll_final[modelInd,]) )
-        print ('[time] Mean : ', "%.2f" % np.mean(svgd_time_final[modelInd,]), ' st.dev : ', "%.2f" % np.std(svgd_time_final[modelInd,]), '\n')
-        print('--------------------------------------------------------------------------------')
-
-
-    print('--------------------------------------------------------------------------------')
-    print('[Options] : M=',numParticles, ', m=',m, ', max_iter=', max_iter, ', n_hidden=',n_hidden, ', batch_size=',batch_size)
-    print('--------------------------------------------------------------------------------')
-    for modelInd in range(0,modelNum):
-        print (names[modelInd],' [Average of', numIter, 'runs] : ', max_iter, ' iterations')
-        print ('[rmse] Mean : ', "%.4f" % np.mean(svgd_rmse_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_rmse_final[modelInd,]) )
-        print ('[llik] Mean : ', "%.4f" % np.mean(svgd_ll_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_ll_final[modelInd,]) )
-        print ('[time] Mean : ', "%.2f" % np.mean(svgd_time_final[modelInd,]), ' st.dev : ', "%.2f" % np.std(svgd_time_final[modelInd,]), '\n')
+        for modelInd in range(0,modelNum):
+            print (names[modelInd],' [Average of', numIter, 'runs] : ', max_iters[modelInd], ' iterations')
+            print ('[rmse] Mean : ', "%.4f" % np.mean(svgd_rmse_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_rmse_final[modelInd,]) )
+            print ('[llik] Mean : ', "%.4f" % np.mean(svgd_ll_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_ll_final[modelInd,]) )
+            print ('[time] Mean : ', "%.2f" % np.mean(svgd_time_final[modelInd,]), ' st.dev : ', "%.2f" % np.std(svgd_time_final[modelInd,]), '\n')
