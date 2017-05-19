@@ -144,6 +144,8 @@ end
 
 %% Plot the results
 results = {t_vals, mse_x, mse_xsq, mmd_stat};
+matName = sprintf('logreg_nuts_results_%s',datasetName);  
+save(matName,'results');
 figure;
 colOpts = {'h-','o-','*-','.-','x-','s-','d-','^-','v-','p-','h-','>-','<-'};
 titleNames = {'Total Time', 'Estimating mean', 'Estimating covariance', 'Maximum Mean Discrepancy'};
