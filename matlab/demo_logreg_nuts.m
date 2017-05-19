@@ -6,29 +6,31 @@ clear
 %% NUTS Options
 % test on 13 binary classification datasets
 load benchmarks.mat;
+addpath('./nuts/')
 
 % parameters for NUTS
 n_warm_up = 1000;
 train_ratio = 0.8;
 
-N = 100; % number of samples to generate
+N = 10000; % number of samples to generate
 a0 = 1; b0 = 1; % hyper-parameters
 
 
 %% SVGD Options
 MOpts = [10,20,30,50,80,100,150,200,250];
-mOpts = [MOpts/2];
+%MOpts = [10,20];
+mOpts = [5,10,10,20,20,20,35,40,50];
 %mOpts = [5 ones(1,4) * 10  ones(1,4) * 20];
 maxIter = 3000;  % maximum iteration times
 numTimeSteps = 10; % How many timesteps we want to shows
-maxTrial = 1;% How many trials we want to average over
+maxTrial = 10;% How many trials we want to average over
 timeStepUnit = maxIter / numTimeSteps;
-m = 20;
+%m = 20;
 adverIter = 10;
 optNum = length(MOpts);
 algNames = {'SVGD','Random Subset', 'Random Subset + Control Functional', ...
-    'Induced Points'};
-    %'Induced Points', 'Adversarial Induced Points (10 updates)'};
+%    'Induced Points'};
+    'Induced Points', 'Adversarial Induced Points (10 updates)'};
 numModels = length(algNames);
 baseModel = getModel('none',-1);                                   % Base Model
 
@@ -70,7 +72,7 @@ for datasetInd = 1:length(benchmarks)
     cov_nuts = cov(theta_nuts);
 
     evalPerformance = @(points)evalPoints(points, x_nuts, cov_nuts);
-    evalMMD = @(points)mmd(points, theta_nuts);
+    evalMMD = @(points)evalPointsMMD(points, theta_nuts);
 
     mse_x = zeros(numModels,optNum);
     mse_cov = zeros(numModels,optNum);
@@ -91,8 +93,8 @@ for datasetInd = 1:length(benchmarks)
         inducedModel = getModel('inducedPoints',-1, m,0,-1,0,false);       % Induced Points
         inducedAdverModel = getModel('inducedPoints',-1, m,3,adverIter,0.1,true);   % Induced Points - update y,h
 
-        %modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel, inducedAdverModel};
-        modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel};
+        modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel, inducedAdverModel};
+        %modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel};
 
         % Try this many times
         for trialInd = 1:maxTrial
@@ -126,8 +128,8 @@ for datasetInd = 1:length(benchmarks)
                 theta = svgd(theta0, dlog_p, maxIter, modelOpt);
                 timePassed = toc(timeStart);
 
-                [MSE_x, MSE_xsq] = evalPerformance(theta);
-                [~,HInfo]= evalMMD(theta);
+                [MSE_x, MSE_cov] = evalPerformance(theta);
+                HInfo= evalMMD(theta);
                 
 
                 mse_x(modelInd, mInd) = mse_x(modelInd, mInd) + MSE_x / maxTrial;
@@ -143,7 +145,7 @@ for datasetInd = 1:length(benchmarks)
 end
 
 %% Plot the results
-results = {t_vals, mse_x, mse_xsq, mmd_stat};
+results = {t_vals, mse_x, mse_cov, mmd_stat};
 matName = sprintf('logreg_nuts_results_%s',datasetName);  
 save(matName,'results');
 figure;
@@ -155,7 +157,12 @@ MOptsTxt = {'10','20','30','50','80','100','150','200','250'};
 
 
 for j = 1:4
-    subplot(2,3,j);
+    if j >= 3
+        subplot(2,3,j+1);
+    else
+        subplot(2,3,j);
+    end
+    
     handles = zeros(1, numModels);
     result = results{j};
     for i = 1:numModels
@@ -173,7 +180,7 @@ for j = 1:4
     set(gca,'XtickLabel',{'10','50','250'});
 end
 
-subplot(1,5,5);
+subplot(2,3,6);
 axis off;
 leg1 = legend(handles, algNames, 'Orientation','vertical');
 %set(leg1, 'Position',[0.7 0.3 0 0]);
@@ -190,4 +197,10 @@ end
 
 function val = MSE(y,yhat)
     val = mean((y(:) - yhat(:)).^2);
+end
+
+function [HInfo]= evalPointsMMD(points, points_nuts)
+    points_total = [points;points_nuts];
+    labels = [ones(1,size(points_nuts,1)) ones(1,size(points,1)) * -1];
+    [~,HInfo]= mmd(points_total, labels);
 end
