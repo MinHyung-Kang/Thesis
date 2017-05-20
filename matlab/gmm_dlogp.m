@@ -1,5 +1,5 @@
 % Creates a function handle that returns gradp for gmm
-function gradp = gmm_dlogp(pdistrib, X)
+function gradp = gmm_dlogp(pdistrib, X, pVal)
     mu = pdistrib.mu;
     sigma = pdistrib.Sigma;
     numComp = pdistrib.NumComponents;
@@ -14,5 +14,10 @@ function gradp = gmm_dlogp(pdistrib, X)
         back = (bsxfun(@minus, X, mu(k,:)) * (inv(covMat_i))'); % n by d
         gradp = gradp + (-1) * w_k * bsxfun(@times, front, back);
     end
+
+    if nargin == 2
+        pVal = log(pdf(pdistrib,X));
+    end
+
     gradp = bsxfun(@rdivide, gradp, pVal);
 end
