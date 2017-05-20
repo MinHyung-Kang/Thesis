@@ -2,151 +2,145 @@
 % NUTS: example http://arxiv.org/abs/1111.4246
 
 clear
+rng(1);
 
-%% NUTS Options
-% test on 13 binary classification datasets
-load benchmarks.mat;
+addpath('./nuts/')
 
 % parameters for NUTS
-n_warm_up = 1000;
-train_ratio = 0.8;
+n_warm_up = 10000;
 
 N = 10000; % number of samples to generate
 a0 = 1; b0 = 1; % hyper-parameters
 
-
 %% SVGD Options
 MOpts = [10,20,30,50,80,100,150,200,250];
-mOpts = [MOpts/2];
-%mOpts = [5 ones(1,4) * 10  ones(1,4) * 20];
+mOpts = [5,10,10,20,20,20,35,40,50];
 maxIter = 3000;  % maximum iteration times
 numTimeSteps = 10; % How many timesteps we want to shows
-maxTrial = 1;% How many trials we want to average over
+maxTrial = 10;% How many trials we want to average over
 timeStepUnit = maxIter / numTimeSteps;
-m = 20;
+
 adverIter = 10;
 optNum = length(MOpts);
 algNames = {'SVGD','Random Subset', 'Random Subset + Control Functional', ...
-    'Induced Points'};
-    %'Induced Points', 'Adversarial Induced Points (10 updates)'};
+    'Induced Points', 'Adversarial Induced Points (10 updates)'};
 numModels = length(algNames);
 baseModel = getModel('none',-1);                                   % Base Model
 
 %% NUTS Sampling
-for datasetInd = 1:length(benchmarks)
-    dataset = benchmarks{datasetInd};
-    % If saved, load that dataset
-    datasetName = sprintf('%s_%d_%d.mat', dataset,n_warm_up,N);
-    if exist(datasetName,'file') > 0
-        load(datasetName);
-        [~, d] = size(Xtrain);
-        D = d+1;
-    else
-        bm = eval(char(dataset));
-        X = bm.x; Y = bm.t;
 
-        X = [ones(size(X,1),1), X]; %bias term
-        [n, d] = size(X);
+dimOpts = [10,25,50,100];
+kOpts = [10,25,50,100];
 
-        %% random partition
-        train_idx = randperm(n, round(train_ratio*n)); test_idx = setdiff(1:n, train_idx);
-        Xtrain = X(train_idx, :); Ytrain = Y(train_idx);
-        Xtest = X(test_idx, :); Ytest = Y(test_idx);
-        train_num = length(train_idx);
+%dimOpts = [5,10];
+%kOpts = [5,10];
 
-        % training/testing
-        D = d+1; % number of parameters (w & alpha)
-        ntrain = size(Xtrain, 1); ntest = size(Xtest, 1);
-        log_bayeslr_nuts = @(theta) logreg(theta, Xtrain, Ytrain, a0, b0); % log posterior
 
-        % NUTS
-        tic
-            [theta_nuts, ~] = nuts_da(log_bayeslr_nuts, N, n_warm_up, randn(1, D));
-        toc;
+for dimInd = 1:length(dimOpts)
+    d = dimOpts(dimInd);
+    for kInd = 1:length(kOpts)
 
-        % Save the results
-        save(datasetName, 'theta_nuts', 'Xtrain', 'Ytrain');
-    end
+        k = kOpts(kInd);
+        mu = k * randn(k,d);            % Mean
+        sigma = repmat(eye(d),1,1,k);   % Covariance
+        for i = 1:k
+            Crand = rand(d,d);
+            sigma(:,:,i) = (Crand + Crand' + d * eye(d))/d;
+        end
+        w = rand(k,1);  % Weights
+        w = w/sum(w);
+        pdistrib = gmdistribution(mu, sigma, w');
 
-    evalPerformance = @(points)evalPoints(points, theta_nuts);
+        taskName = sprintf('%s_%ddim_%dclusters_%d_%d.mat','gmm',d,k,n_warm_up,N);
 
-    mse_x = zeros(numModels,optNum);
-    mse_xsq = zeros(numModels,optNum);
-    t_vals = zeros(numModels, optNum);
+        % Log likelihood and derivative for nuts
+        log_gmm_nuts = @(theta)getGMMVal(pdistrib, theta);
 
-    %% SVGD
-    dlog_p = @(theta,seed) dlog_p_lr(theta,Xtrain,Ytrain,size(Xtrain,1),seed,a0,b0);
+        % Derivative function handle for svgd
+        dlog_p = @(theta,seed)gmm_dlogp(pdistrib, theta);
 
-    % For each option
-    for mInd = 1:optNum
-        M = MOpts(mInd);
-        m = mOpts(mInd);
+        % Use NUTS to get samples
+        theta_nuts = random(pdistrib,N);
 
-        % Redefine all the models for given m
-        subsetModel = getModel('subset',-1, m);                            % Random Subset
-        subsetCFModel = getModel('subsetCF',-1, m);                        % Random Subset (CF)
-        inducedModel = getModel('inducedPoints',-1, m,0,-1,0,false);       % Induced Points
-        inducedAdverModel = getModel('inducedPoints',-1, m,3,adverIter,0.1,true);   % Induced Points - update y,h
+        x_nuts = mean(theta_nuts,1);
+        cov_nuts = cov(theta_nuts);
 
-        %modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel, inducedAdverModel};
-        modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel};
+        evalPerformance = @(points)evalPoints(points, x_nuts, cov_nuts);
+        evalMMD = @(points)evalPointsMMD(points, theta_nuts);
 
-        % Try this many times
-        for trialInd = 1:maxTrial
+        mse_x = zeros(numModels,optNum);
+        mse_cov = zeros(numModels,optNum);
+        t_vals = zeros(numModels, optNum);
+        mmd_stat = zeros(numModels, optNum);
 
-            % Initialize
-            alpha0 = gamrnd(a0, b0, M, 1);
-            theta0 = zeros(M, D);
-            for i = 1:M
-                theta0(i,:) = [normrnd(0, sqrt((1/alpha0(i))), 1, d), log(alpha0(i))]; % w and log(alpha)
-            end
+        % for m
+        for mInd = 1:optNum
+            M = MOpts(mInd);
+            m = mOpts(mInd);
 
-            % Evaluate for each model
-            for modelInd = 1:length(modelOpts)
-                fprintf('Evaluating : (M=%d) Trial (%d/%d) Model : %s \n',...
-                    M, trialInd, maxTrial, algNames{modelInd});
+            % Redefine all the models for given m
+            subsetModel = getModel('subset',-1, m);                            % Random Subset
+            subsetCFModel = getModel('subsetCF',-1, m);                        % Random Subset (CF)
+            inducedModel = getModel('inducedPoints',-1, m,0,-1,0,false);       % Induced Points
+            inducedAdverModel = getModel('inducedPoints',-1, m,3,adverIter,0.1,true);   % Induced Points - update y,h
 
-                modelOpt = modelOpts{modelInd};
-                modelOpt.baseSeed = trialInd * maxIter;
-                theta = theta0;
+            modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel, inducedAdverModel};
 
-                % Get update
-                timeStart = tic;
-                 for iter = 1:maxIter
-                    % Get update
+            for trialInd = 1:maxTrial
+                theta0 = randn(M,d);
+
+                for modelInd = 1:length(modelOpts)
+                    fprintf('[%d dimension /%d clusters]Evaluating : (M=%d) Trial (%d/%d) Model : %s \n',...
+                        d, k, M, trialInd, maxTrial, algNames{modelInd});
+                    modelOpt = modelOpts{modelInd};
+
+                    % SVGD update
                     timeStart = tic;
-                    modelOpt.nextSeed = trialInd * maxIter + iter;
-                    [theta, gradInfo, modelOpt] = svgd_singleIteration(theta, dlog_p, gradInfo, modelOpt);
-                 end                 
-%                 modelOpt.baseSeed = trialInd * maxIter;
-%                 theta = svgd(theta0, dlog_p, maxIter, modelOpt);
-                timePassed = toc(timeStart);
+                    modelOpt.baseSeed = trialInd * maxIter;
+                    theta = svgd(theta0, dlog_p, maxIter, modelOpt);
+                    timePassed = toc(timeStart);
 
-                [MSE_x, MSE_xsq] = evalPerformance(theta);
+                    [MSE_x, MSE_cov] = evalPerformance(theta);
+                    HInfo= evalMMD(theta);
 
-                mse_x(modelInd, mInd) = mse_x(modelInd, mInd) + MSE_x / maxTrial;
-                mse_xsq(modelInd, mInd) = mse_xsq(modelInd, mInd) + MSE_xsq / maxTrial;
-                t_vals(modelInd, mInd) = t_vals(modelInd, mInd) + timePassed/maxTrial;
+                    mse_x(modelInd, mInd) = mse_x(modelInd, mInd) + MSE_x / maxTrial;
+                    mse_cov(modelInd, mInd) = mse_cov(modelInd, mInd) + MSE_cov / maxTrial;
+                    t_vals(modelInd, mInd) = t_vals(modelInd, mInd) + timePassed/maxTrial;
+                    mmd_stat(modelInd, mInd) = mmd_stat(modelInd, mInd) + HInfo.mmd.val/maxTrial;
+                end
             end
         end
 
-    end
+        results = {t_vals, mse_x, mse_cov, mmd_stat};
+        matName = sprintf('./results/gmm_nuts_results_%s',taskName);
+        save(matName,'results');
 
-    return;  % EARLY STOP HERE
+    end
 end
 
+return;
+
 %% Plot the results
-results = {t_vals, mse_x, mse_xsq};
+
 figure;
+optNum = 9;
+algNames = {'SVGD','Random Subset', 'Random Subset + Control Functional', ...
+    'Induced Points', 'Adversarial Induced Points (10 updates)'};
+numModles = length(algNames);
 colOpts = {'h-','o-','*-','.-','x-','s-','d-','^-','v-','p-','h-','>-','<-'};
-titleNames = {'Total Time', 'Estimating x', 'Estimating x^2'};
-yLabels = {'log10 t', 'log10 MSE', 'log10 MSE'};
+titleNames = {'Total Time', 'Estimating mean', 'Estimating covariance', 'Maximum Mean Discrepancy'};
+yLabels = {'log10 t', 'log10 MSE', 'log10 MSE', 'test statistic'};
 
 MOptsTxt = {'10','20','30','50','80','100','150','200','250'};
 
 
-for j = 1:3
-    subplot(1,4,j);
+for j = 1:4
+    if j >= 3
+        subplot(2,3,j+1);
+    else
+        subplot(2,3,j);
+    end
+
     handles = zeros(1, numModels);
     result = results{j};
     for i = 1:numModels
@@ -164,24 +158,58 @@ for j = 1:3
     set(gca,'XtickLabel',{'10','50','250'});
 end
 
-subplot(1,4,4);
+subplot(2,3,6);
 axis off;
 leg1 = legend(handles, algNames, 'Orientation','vertical');
-%set(leg1, 'Position',[0.7 0.3 0 0]);
 set(leg1, 'Position',[0.8 0.5 0.05 0.05]);
 
+
 %% Auxiliary functions
-function [MSE_x, MSE_xsq] = evalPoints(points, points_nuts)
-    x_hat = mean(points,1);
-    xsq_hat = mean(points.^2,1);
+function [MSE_x, MSE_xsq] = evalPoints(points, x_nuts, cov_nuts)
+     x_hat = mean(points,1);
+     cov_hat = cov(points);
 
-    x_nuts = mean(points_nuts,1);
-    xsq_nuts = mean(points_nuts.^2,1);
+     MSE = @(y,yhat)(mean((y(:) - yhat(:)).^2));
 
-    MSE_x = log10(MSE(x_hat, x_nuts));
-    MSE_xsq = log10(MSE(xsq_hat, xsq_nuts));
-end
+     MSE_x = log10(MSE(x_hat, x_nuts));
+     MSE_xsq = log10(MSE(cov_hat, cov_nuts));
+ end
 
-function val = MSE(y,yhat)
-    val = mean((y(:) - yhat(:)).^2);
-end
+ function [HInfo]= evalPointsMMD(points, points_nuts)
+     points_total = [points;points_nuts];
+     labels = [ones(1,size(points_nuts,1)) ones(1,size(points,1)) * -1];
+     [~,HInfo]= mmd(points_total, labels);
+ end
+
+
+ % Creates a function handle that returns the values of logp and gradp for
+ % given dataset
+ function [logp, gradp] = getGMMVal(pdistrib,X)
+     pVal = pdf(pdistrib,X);
+     logp = log(pVal);
+
+     gradp = gmm_dlogp(pdistrib, X, pVal);
+ end
+
+ function gradp = gmm_dlogp(pdistrib, X, pVal)
+     mu = pdistrib.mu;
+     sigma = pdistrib.Sigma;
+     numComp = pdistrib.NumComponents;
+     w = pdistrib.ComponentProportion;
+     [N,T] = size(X);
+     gradp = zeros(N, T);
+     for k = 1:numComp % For each component
+         mu_k = mu(k,:);
+         covMat_i = sigma(:,:,k);
+         w_k = w(k);
+         front = mvnpdf(X, mu_k, covMat_i);   % n by 1
+         back = (bsxfun(@minus, X, mu(k,:)) * (inv(covMat_i))'); % n by d
+         gradp = gradp + (-1) * w_k * bsxfun(@times, front, back);
+     end
+
+     if nargin == 2
+         pVal = log(pdf(pdistrib,X));
+     end
+
+     gradp = bsxfun(@rdivide, gradp, pVal);
+ end
