@@ -17,7 +17,7 @@ MOpts = [10,20,30,50,80,100,150,200,250];
 mOpts = [5,10,10,20,20,20,35,40,50];
 maxIter = 3000;  % maximum iteration times
 numTimeSteps = 10; % How many timesteps we want to shows
-maxTrial = 10;% How many trials we want to average over
+maxTrial = 1;% How many trials we want to average over
 timeStepUnit = maxIter / numTimeSteps;
 
 adverIter = 10;
@@ -29,8 +29,8 @@ baseModel = getModel('none',-1);                                   % Base Model
 
 %% NUTS Sampling
 
-dimOpts = [10,25,50,100];
-kOpts = [10,25,50,100];
+dimOpts = [1];
+kOpts = [2];
 
 %dimOpts = [5,10];
 %kOpts = [5,10];
@@ -126,7 +126,7 @@ figure;
 optNum = 9;
 algNames = {'SVGD','Random Subset', 'Random Subset + Control Functional', ...
     'Induced Points', 'Adversarial Induced Points (10 updates)'};
-numModles = length(algNames);
+numModels = length(algNames);
 colOpts = {'h-','o-','*-','.-','x-','s-','d-','^-','v-','p-','h-','>-','<-'};
 titleNames = {'Total Time', 'Estimating mean', 'Estimating covariance', 'Maximum Mean Discrepancy'};
 yLabels = {'log10 t', 'log10 MSE', 'log10 MSE', 'test statistic'};
