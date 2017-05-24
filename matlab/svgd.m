@@ -46,7 +46,6 @@ case 'adagrad'
     dlog_p = @(val)dlog_p_ori(val, opts.currentSeed);
 
     for iter = 1:max_iter
-
         [grad, ksdInfo] = KSD_KL_gradxy(theta, dlog_p, opts.kernel_opts);   %\Phi(theta)
 
         [adam_grad,historical_grad] = getAdamUpdate(grad, historical_grad, opts.master_stepsize, opts.auto_corr, fudge_factor);
@@ -61,27 +60,36 @@ case 'adagrad'
             h = -1;
             opts.kernel_opts.h = h;
             Sqx = dlog_p(theta);
-        end
+            
+            for adverInd = 1:opts.kernel_opts.adverIter
+                if opts.kernel_opts.batchSize > 0
+                    subsetInd = randi([1,size(theta,1)],opts.kernel_opts.batchSize,1);
+                    theta_adver = theta(subsetInd,:);
+                    Sqx_adver = Sqx(subsetInd,:);
+                else
+                    theta_adver = theta;
+                    Sqx_adver = Sqx;
+                end
 
-        for adverInd = 1:opts.kernel_opts.adverIter
-            % If using adversairal updates for y
-            if opts.kernel_opts.adver == 1 || opts.kernel_opts.adver == 3
-                [yGrad, ~] = inducedKernel_grady(theta, Y, Sqx, opts.kernel_opts);
-                [adam_yGrad,y_historical_grad] = getAdamUpdate(yGrad, y_historical_grad, opts.master_stepsize, opts.auto_corr, fudge_factor);
-                Y = Y + adam_yGrad; % update
-                opts.kernel_opts.Y = Y;
+
+                % If using adversairal updates for y
+                if opts.kernel_opts.adver == 1 || opts.kernel_opts.adver == 3
+                    [yGrad, ~] = inducedKernel_grady(theta_adver, Y, Sqx_adver, opts.kernel_opts);
+                    [adam_yGrad,y_historical_grad] = getAdamUpdate(yGrad, y_historical_grad, opts.master_stepsize, opts.auto_corr, fudge_factor);
+                    Y = Y + adam_yGrad; % update
+                    opts.kernel_opts.Y = Y;
+                end
+
+                % If using adversairal updates for h
+                if opts.kernel_opts.adver == 2 || opts.kernel_opts.adver == 3
+                    [hGrad, info] = inducedKernel_gradh(theta_adver, Y, Sqx_adver, opts.kernel_opts);
+                    if h == -1; h = info.bandwidth; end
+                    [adam_hGrad,h_historical_grad] = getAdamUpdate(hGrad, h_historical_grad, opts.master_stepsize, opts.auto_corr, fudge_factor);
+                    h = h + adam_hGrad; % update
+                    opts.kernel_opts.h = h;
+                end
             end
-
-            % If using adversairal updates for h
-            if opts.kernel_opts.adver == 2 || opts.kernel_opts.adver == 3
-                [hGrad, info] = inducedKernel_gradh(theta, Y, Sqx, opts.kernel_opts);
-                if h == -1; h = info.bandwidth; end
-                [adam_hGrad,h_historical_grad] = getAdamUpdate(hGrad, h_historical_grad, opts.master_stepsize, opts.auto_corr, fudge_factor);
-                h = h + adam_hGrad; % update
-                opts.kernel_opts.h = h;
-            end
-
-        end
+        end        
     end
 
 otherwise

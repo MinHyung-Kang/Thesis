@@ -1,4 +1,4 @@
-function [ opt ] = getModel(method, h, m, adver, adverIter, alpha, uStat)
+function [ opt ] = getModel(method, h, m, adver, adverIter, alpha, uStat, batchSize)
 % Function that returns a given model
 % Input:
 % -- method : Name of the method to use
@@ -10,6 +10,7 @@ function [ opt ] = getModel(method, h, m, adver, adverIter, alpha, uStat)
 % -- adverIter : number of adverse iterations to take
 % -- alpha : regularization parameter
 % -- uStat : Whether to compute u-Statistics or not
+% -- batchSize : take subset for M
 
 
     % Common options
@@ -21,6 +22,7 @@ function [ opt ] = getModel(method, h, m, adver, adverIter, alpha, uStat)
     opts.kernel_opts.adverIter = 1; % Number of adverse iterations to take
     opts.kernel_opts.alpha = 0.1;   % Regularization paremeter
     opts.kernel_opts.uStat = true;  % Whether to compute uStats or not
+    opts.kernel_opts.batchSize = -1;
     opt = opts;
 
 
@@ -50,6 +52,10 @@ function [ opt ] = getModel(method, h, m, adver, adverIter, alpha, uStat)
         if nargin >= 6
             opt.kernel_opts.alpha = alpha;
             opt.kernel_opts.uStat = uStat;
+        end
+        
+        if nargin >= 8
+            opt.kernel_opts.batchSize = batchSize;
         end
 
     end

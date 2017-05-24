@@ -9,7 +9,7 @@ load benchmarks.mat;
 addpath('./nuts/')
 
 % parameters for NUTS
-n_warm_up = 1000;
+n_warm_up = 10000;
 train_ratio = 0.8;
 
 N = 10000; % number of samples to generate
@@ -29,13 +29,14 @@ timeStepUnit = maxIter / numTimeSteps;
 adverIter = 10;
 optNum = length(MOpts);
 algNames = {'SVGD','Random Subset', 'Random Subset + Control Functional', ...
-    'Induced Points', 'Adversarial Induced Points (10 updates)'};
+    'Induced Points', 'Adversarial Induced Points (10 updates)','Adversarial Induced Points (Batch,10 updates)'};
 %    'Induced Points'};
 numModels = length(algNames);
 baseModel = getModel('none',-1);                                   % Base Model
 
 %% NUTS Sampling
-for datasetInd = 7:length(benchmarks)
+%for datasetInd = 7:length(benchmarks)
+for datasetInd = 1:9
     dataset = benchmarks{datasetInd};
     % If saved, load that dataset
     datasetName = sprintf('%s_%d_%d.mat', dataset,n_warm_up,N);
@@ -92,8 +93,9 @@ for datasetInd = 7:length(benchmarks)
         subsetCFModel = getModel('subsetCF',-1, m);                        % Random Subset (CF)
         inducedModel = getModel('inducedPoints',-1, m,0,-1,0,false);       % Induced Points
         inducedAdverModel = getModel('inducedPoints',-1, m,3,adverIter,0.1,true);   % Induced Points - update y,h
+        inducedAdverModelSubset = getModel('inducedPoints',-1, m,3,adverIter,0.1,true,m);   % Induced Points - update y,h
 
-        modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel, inducedAdverModel};
+        modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel, inducedAdverModel,inducedAdverModelSubset};
         %modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel};
 
         % Try this many times
@@ -141,8 +143,10 @@ for datasetInd = 7:length(benchmarks)
 
     end
     results = {t_vals, mse_x, mse_cov, mmd_stat};
-    matName = sprintf('logreg_nuts_results_%s',datasetName);
+    matName = sprintf('logreg_nuts_results_subset_%s',datasetName);
     save(matName,'results');    
+    
+    return;
 end
 
 
@@ -151,8 +155,10 @@ return;  % EARLY STOP HERE
 figure('Position', [100, 100, 800, 250]);
 %figure;
 optNum = 9;
+%algNames = {'SVGD','Random Subset', 'Random Subset + Control Functional', ...
+%    'Induced Points', 'Adversarial Induced Points (10 updates)'};
 algNames = {'SVGD','Random Subset', 'Random Subset + Control Functional', ...
-    'Induced Points', 'Adversarial Induced Points (10 updates)'};
+    'Induced Points', 'Adversarial Induced Points (10 updates)','Adversarial Induced Points (Batch,10 updates)'};
 numModels = length(algNames);
 colOpts = {'h-','o-','*-','.-','x-','s-','d-','^-','v-','p-','h-','>-','<-'};
 titleNames = {'Total Time','Maximum Mean Discrepancy'};
@@ -189,9 +195,9 @@ end
 
 %subplot(1,2,3);
 %axis off;
-% leg1 = legend(handles, algNames, 'Orientation','horizontal');
-% %set(leg1, 'Position',[0.7 0.3 0 0]);
-% set(leg1, 'Position',[0.4 0.1 0.05 0.05]);
+leg1 = legend(handles, algNames, 'Orientation','horizontal');
+%set(leg1, 'Position',[0.7 0.3 0 0]);
+set(leg1, 'Position',[0.4 0.1 0.05 0.05]);
 
 ax1 = axes('Position',[0 0 1 1],'Visible','off');
 axes(ax1) % sets ax1 to current axes
