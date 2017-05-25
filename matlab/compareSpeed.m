@@ -39,7 +39,9 @@ for mInd = 1:optNum
     inducedAdverModel5 = getModel('inducedPoints',-1, m,3,5,0.1,true);   % Induced Points - update y,h
     inducedAdverModelSubset5 = getModel('inducedPoints',-1, m,3,5,0.1,true,m);   % Induced Points - update y,h
 
-    modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel, inducedAdverModel};
+    modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel, ...
+        inducedAdverModel1,inducedAdverModelSubset1, ...
+        inducedAdverModel5,inducedAdverModelSubset5};
 
     for trialInd = 1:maxTrial
         % Common starting parameter
