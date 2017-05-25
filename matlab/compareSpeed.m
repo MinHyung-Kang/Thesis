@@ -34,7 +34,10 @@ for mInd = 1:optNum
     subsetModel = getModel('subset',-1, m);                            % Random Subset
     subsetCFModel = getModel('subsetCF',-1, m);                        % Random Subset (CF)
     inducedModel = getModel('inducedPoints',-1, m,0,-1,0,false);       % Induced Points
-    inducedAdverModel = getModel('inducedPoints',-1, m,3,adverIter,0.1,true);   % Induced Points - update y,h
+    inducedAdverModel1 = getModel('inducedPoints',-1, m,3,1,0.1,true);   % Induced Points - update y,h
+    inducedAdverModelSubset1 = getModel('inducedPoints',-1, m,3,1,0.1,true,m);   % Induced Points - update y,h
+    inducedAdverModel5 = getModel('inducedPoints',-1, m,3,5,0.1,true);   % Induced Points - update y,h
+    inducedAdverModelSubset5 = getModel('inducedPoints',-1, m,3,5,0.1,true,m);   % Induced Points - update y,h
 
     modelOpts = {baseModel, subsetModel, subsetCFModel, inducedModel, inducedAdverModel};
 
@@ -47,6 +50,7 @@ for mInd = 1:optNum
                 M, trialInd, maxTrial, algNames{modelInd});
             
             modelOpt = modelOpts{modelInd};
+            modelOpt.baseSeed = trialInd * maxIter;
             % Get update
             timeStart = tic;
             theta = svgd(theta0, dlog_p, maxIter, modelOpt);
