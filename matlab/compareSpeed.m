@@ -11,7 +11,11 @@ MOpts = [10,20,50,100,200,250,500,750,1000,1500,2000,2500,5000];
 optNum = length(MOpts);
 mOpts = ones(1,optNum) * 5; 
 algNames = {'SVGD','Random Subset', 'Random Subset + Control Functional', ...
-'Induced Points', 'Adversarial Induced Points'};
+'Induced Points', 'Adversarial Induced Points(1 iteration)',...
+'Adversarial Induced Points(Batch, 1 iteration)',...
+'Adversarial Induced Points(5 iteration)', ...
+'Adversarial Induced Points(Batch, 5 iteration)'};
+modelNum = length(algNames);
 % Score function (simplest possible)
 dlog_p = @(X)(X);
 
@@ -20,7 +24,7 @@ dlog_p = @(X)(X);
 
 baseModel = getModel('none',-1);                                   % Base Model
 
-t_vals = zeros(5, optNum);
+t_vals = zeros(modelNum, optNum);
 
 for mInd = 1:optNum
     M = MOpts(mInd);
@@ -49,9 +53,9 @@ for mInd = 1:optNum
             timePassed = toc(timeStart);
             t_vals(modelInd, mInd) = t_vals(modelInd, mInd) + timePassed/maxTrial;
 
-		save('t_vals.mat','t_vals');
+            save('allModels_t_vals.mat','t_vals');
         	indices = [mInd, trialInd, modelInd];
-        	save('indices.mat','indices');
+        	save('allModels_indices.mat','indices');
         end
 
     end
