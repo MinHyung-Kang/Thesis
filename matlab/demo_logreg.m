@@ -10,8 +10,8 @@ load benchmarks.mat;
 n_warm_up = 1000;
 train_ratio = 0.8;
 
-N = 100; % number of samples
-M = 1; % number of particles
+N = 200; % number of samples
+M = 40; % number of particles
 a0 = 1; b0 = 1; % hyper-parameters
 
 for dataset = benchmarks

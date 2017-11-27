@@ -38,7 +38,7 @@ class svgd_bayesnn:
             -- a0, b0: hyper-parameters of Gamma distribution
             -- master_stepsize, auto_corr: parameters of adgrad
     '''
-    def __init__(self, X_train, y_train,  batch_size = 100, max_iter = 1000, M = 20, n_hidden = 50,
+    def __init__(self, X_train, y_train,  X_test, y_text, batch_size = 100, max_iter = 1000, M = 20, n_hidden = 50,
         a0 = 1, b0 = 0.1, master_stepsize = 1e-3, auto_corr = 0.9, h=-1, alpha = 0.9,
         method = 'none',m=5, cf = False, uStat = True, regCoeff = 0.1, adver = False, adverMaxIter = 5,
         maxTime = 20, numTimeSteps = 20):
@@ -129,7 +129,12 @@ class svgd_bayesnn:
         self.y_historical_grad = 0
         self.h_historical_grad = 0
 
-        theta_overTime = np.zeros([self.M, numTimeSteps])  # gradient
+        self.rmse_overTime = np.zeros(numTimeSteps)  # RMSE
+        self.llh_overTime = np.zeros(numTimeSteps)  # LLH
+        self.time_overTime = np.zeros(numTimeSteps)  # LLH
+        timeStepUnit = max_iter / numTimeSteps # Time to check every iteration
+
+
         start_time = time.time()
         for iter in range(max_iter):
             if method == 'subparticles':
@@ -168,26 +173,34 @@ class svgd_bayesnn:
             self.theta = self.theta + adj_grad;
 
 
+            if iter % timeStepUnit == 0:
+                self.thetaCopy = np.copy(self.theta)
 
-            elapsed_time = time.time() - start_time
+                # Evaluate and save
+                '''
+                    Model selection by using a development set
+                '''
+                X_dev = self.normalization(X_dev)
+                for i in range(self.M):
+                    w1, b1, w2, b2, loggamma, loglambda = self.unpack_weights(self.thetaCopy[i, :])
+                    pred_y_dev = self.nn_predict(X_dev, w1, b1, w2, b2) * self.std_y_train + self.mean_y_train
+                    # likelihood
+                    def f_log_lik(loggamma): return np.sum(  np.log(np.sqrt(np.exp(loggamma)) /np.sqrt(2*np.pi) * np.exp( -1 * (np.power(pred_y_dev - y_dev, 2) / 2) * np.exp(loggamma) )) )
+                    # The higher probability is better
+                    lik1 = f_log_lik(loggamma)
+                    # one heuristic setting
+                    loggamma = -np.log(np.mean(np.power(pred_y_dev - y_dev, 2)))
+                    lik2 = f_log_lik(loggamma)
+                    if lik2 > lik1:
+                        self.thetaCopy[i,-2] = loggamma  # update loggamma
 
+                svgd_rmse, svgd_ll = self.evaluation(X_test, y_test)
+                stepInd = int(iter / timeStepUnit)
+                elapsed_time = time.time() - start_time
 
-        '''
-            Model selection by using a development set
-        '''
-        X_dev = self.normalization(X_dev)
-        for i in range(self.M):
-            w1, b1, w2, b2, loggamma, loglambda = self.unpack_weights(self.theta[i, :])
-            pred_y_dev = self.nn_predict(X_dev, w1, b1, w2, b2) * self.std_y_train + self.mean_y_train
-            # likelihood
-            def f_log_lik(loggamma): return np.sum(  np.log(np.sqrt(np.exp(loggamma)) /np.sqrt(2*np.pi) * np.exp( -1 * (np.power(pred_y_dev - y_dev, 2) / 2) * np.exp(loggamma) )) )
-            # The higher probability is better
-            lik1 = f_log_lik(loggamma)
-            # one heuristic setting
-            loggamma = -np.log(np.mean(np.power(pred_y_dev - y_dev, 2)))
-            lik2 = f_log_lik(loggamma)
-            if lik2 > lik1:
-                self.theta[i,-2] = loggamma  # update loggamma
+                self.rmse_overTime[stepInd] = svgd_rmse
+                self.llh_overTime[stepInd] = svgd_ll
+                self.time_overTime[stepInd] = elapsed_time
 
 
     def normalization(self, X, y = None):
@@ -328,10 +341,17 @@ class svgd_bayesnn:
         Compute gradient update for y
     '''
     def svgd_kernel_grady(self, h=-1, uStat=True, regCoeff=0.1):
-        n,d = self.theta.shape
         m = self.y.shape[0]
+        xAdverSubsetInd = np.random.choice(self.theta.shape[0], m, replace=False)
+        self.thetaSubset = self.theta[xAdverSubsetInd,:]
+        self.SqxSubset = self.Sqx[xAdverSubsetInd,:]
 
-        pairwise_dists = cdist(self.theta, self.y)**2
+        #self.thetaSubset = np.copy(self.theta)
+        #self.SqxSubset = np.copy(self.Sqx)
+        n,d = self.thetaSubset.shape
+
+
+        pairwise_dists = cdist(self.thetaSubset, self.y)**2
 
         if h < 0: # if h < 0, using median trick
             h = np.median(pairwise_dists)
@@ -345,8 +365,8 @@ class svgd_bayesnn:
         # Compute gradient
         for yInd in range(m):
             Kxy_cur = Kxy[:,yInd];
-            xmy = (self.theta - np.tile(self.y[yInd,:],[n,1]))/h**2
-            Sqxxmy = self.Sqx - xmy;
+            xmy = (self.thetaSubset - np.tile(self.y[yInd,:],[n,1]))/h**2
+            Sqxxmy = self.SqxSubset - xmy;
             back = np.tile(np.array([Kxy_cur]).T,(1,d)) * Sqxxmy
             inner = np.tile(np.array([np.sum(np.matmul(back, back.T),axis=1)]).T,[1,d])
             yGrad[yInd,:] = np.sum(xmy * inner,axis=0) + np.sum(back,axis=0) * np.sum(Kxy_cur)/h**2
@@ -376,10 +396,10 @@ class svgd_bayesnn:
         Compute gradient update for h
     '''
     def svgd_kernel_gradh(self, h=-1, uStat=True):
-        n,d = self.theta.shape
+        n,d = self.thetaSubset.shape
         m = self.y.shape[0]
 
-        H = cdist(self.theta, self.y)**2
+        H = cdist(self.thetaSubset, self.y)**2
 
         if h < 0: # if h < 0, using median trick
             h = np.median(H)
@@ -394,8 +414,8 @@ class svgd_bayesnn:
         for yInd in range(m):
             Kxy_cur = Kxy[:,yInd]
             H_cur = H[:,yInd]
-            xmy = (self.theta - np.tile(self.y[yInd,:],[n,1]))/h**2
-            Sqxxmy = self.Sqx - xmy
+            xmy = (self.thetaSubset - np.tile(self.y[yInd,:],[n,1]))/h**2
+            Sqxxmy = self.SqxSubset - xmy
 
             part2 = np.tile(np.array([Kxy_cur]).T,[1,d]) * Sqxxmy
             part1_1 = np.tile(np.array([H_cur/h**3]).T,[1,d]) * part2
@@ -494,7 +514,7 @@ class svgd_bayesnn:
             Since we have M particles, we use a Bayesian view to calculate rmse and log-likelihood
         '''
         for i in range(self.M):
-            w1, b1, w2, b2, loggamma, loglambda = self.unpack_weights(self.theta[i, :])
+            w1, b1, w2, b2, loggamma, loglambda = self.unpack_weights(self.thetaCopy[i, :])
             pred_y_test[i, :] = self.nn_predict(X_test, w1, b1, w2, b2) * self.std_y_train + self.mean_y_train
             prob[i, :] = np.sqrt(np.exp(loggamma)) /np.sqrt(2*np.pi) * np.exp( -1 * (np.power(pred_y_test[i, :] - y_test, 2) / 2) * np.exp(loggamma) )
         pred = np.mean(pred_y_test, axis=0)
@@ -505,6 +525,12 @@ class svgd_bayesnn:
 
         return (svgd_rmse, svgd_ll)
 
+    '''
+        Returns the result of the iterations
+    '''
+    def getResults(self):
+        return (self.rmse_overTime, self.llh_overTime, self.time_overTime)
+
 if __name__ == '__main__':
 
     print ('Theano', theano.version.version)    #our implementation is based on theano 0.8.2
@@ -512,7 +538,7 @@ if __name__ == '__main__':
     np.random.seed(1)
     ''' load data file '''
 
-    for dataInd in range(0,1):
+    for dataInd in range(0,4):
         if dataInd == 0:
             data = np.loadtxt('../data/boston_housing')
             datasetName = 'Boston Housing'
@@ -547,74 +573,77 @@ if __name__ == '__main__':
         X_train, y_train = X_input[ index_train, : ], y_input[ index_train ]
         X_test, y_test = X_input[ index_test, : ], y_input[ index_test ]
 
-        #names = ['Base','Subset','Subset-CF','Induced Points','Adversarial IP'];
         #names = ['Base','Subset','Subset-CF','Induced Points'];
-        names = ['Base','Induced Points','Adversarial Induced Points'];
-        numIter = 5
+        names = ['Base','Subset','Subset-CF','Induced Points','Adversarial Induced Points (1)','Adversaril Induced Points (10)'];
+        #names = ['Base','Induced Points','Adversarial Induced Points'];
+        numIter = 10
+        maxTime = 100
+        numTimeSteps = 20
         modelNum = len(names);
-        svgd_time_final = np.zeros((modelNum, numIter))
-        svgd_rmse_final = np.zeros((modelNum, numIter))
-        svgd_ll_final = np.zeros((modelNum, numIter))
+
+        svgd_rmse_final = np.zeros((modelNum, numTimeSteps))
+        svgd_ll_final = np.zeros((modelNum, numTimeSteps))
+        svgd_time_final = np.zeros((modelNum, numTimeSteps))
 
         ''' Training Bayesian neural network with SVGD '''
         #batch_size, n_hidden, max_iter, numParticles = 100, 50, 2000, 30  # max_iter is a trade-off between running time and performance
         batch_size, n_hidden, max_iter, numParticles = 100, 50, 2000, 20  # max_iter is a trade-off between running time and performance
-        max_iterRS = 2750
-        max_iterRSCF = 2750
+        max_iterRS = 2000
+        max_iterRSCF = 2000
         max_iterIP = 2000
         max_iterAIP = 2000
-        m, adverMaxIter = int(2*numParticles/4),5
+        m, adverMaxIter,adverMaxIter2 = 10,1,10
         max_iters = [max_iter, max_iterRS, max_iterRSCF, max_iterIP];
-        modelChoices = [0,3,4];
 
         np.set_printoptions(precision=4)
-        for modelInd in range(0,3):
+        for modelInd in range(0,6):
             for t in range(0,numIter):
                 np.random.seed(t)
                 print(names[modelInd], ': Iteration ', t+1, '/', numIter)
                 start = time.time()
 
                 if modelInd == 0 :# base
-                    svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iter,
+                    svgd = svgd_bayesnn(X_train, y_train, X_test, y_test, numTimeSteps = numTimeSteps, maxTime = maxTime,
+                        batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iter,
                         method = 'none')
-                elif modelInd == 3 : # Subset
-                    svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iterRS,
+                elif modelInd == 1 : # Subset
+                    svgd = svgd_bayesnn(X_train, y_train, X_test, y_test, numTimeSteps = numTimeSteps, maxTime = maxTime,
+                        batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iterRS,
                         method = 'subparticles',m=m,cf=False)
-                elif modelInd == 4 : # Subset (CF)
-                    svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iterRSCF,
+                elif modelInd == 2 : # Subset (CF)
+                    svgd = svgd_bayesnn(X_train, y_train, X_test, y_test, numTimeSteps = numTimeSteps, maxTime = maxTime,
+                        batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iterRSCF,
                         method = 'subparticles',m=m,cf=True)
-                elif modelInd == 1 : # Induced Points
-                    svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iterIP,
+                elif modelInd == 3 : # Induced Points
+                    svgd = svgd_bayesnn(X_train, y_train, X_test, y_test, numTimeSteps = numTimeSteps, maxTime = maxTime,
+                        batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iterIP,
                         method = 'inducedPoints',m=m, uStat = True, adver=False)
-                elif modelInd == 2 : # Induced Points (Adver)
-                    svgd = svgd_bayesnn(X_train, y_train, batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iterAIP,
+                elif modelInd == 4 : # Induced Points (Adver)
+                    svgd = svgd_bayesnn(X_train, y_train, X_test, y_test, numTimeSteps = numTimeSteps, maxTime = maxTime,
+                        batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iterAIP,
                         method = 'inducedPoints',m=m, uStat = True, adver=True, adverMaxIter = adverMaxIter)
+                elif modelInd == 5 : # Induced Points (Adver)
+                            svgd = svgd_bayesnn(X_train, y_train, X_test, y_test, numTimeSteps = numTimeSteps, maxTime = maxTime,
+                                batch_size = batch_size, n_hidden = n_hidden, M=numParticles, max_iter = max_iterAIP,
+                                method = 'inducedPoints',m=m, uStat = True, adver=True, adverMaxIter = adverMaxIter2)
 
-                svgd_time = time.time() - start
-                svgd_rmse, svgd_ll = svgd.evaluation(X_test, y_test)
-                svgd_time_final[modelInd, t] = svgd_time
-                svgd_rmse_final[modelInd, t] = svgd_rmse
-                print(svgd_rmse,'\n')
-                svgd_ll_final[modelInd, t] = svgd_ll
-            '''
-            print('--------------------------------------------------------------------------------')
-            print('Dataset : ', datasetName)
-            print('[Options] : M=',numParticles, ', m=',m, ', max_iter=', max_iter, ', n_hidden=',n_hidden, ', batch_size=',batch_size)
-            print('--------------------------------------------------------------------------------')
+                [rmseResult, llResult, timeResult] = svgd.getResults()
 
-            print (names[modelInd],' [Average of', numIter, 'runs] : ', max_iter, ' iterations')
-            print ('[rmse] Mean : ', "%.4f" % np.mean(svgd_rmse_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_rmse_final[modelInd,]) )
-            print ('[llik] Mean : ', "%.4f" % np.mean(svgd_ll_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_ll_final[modelInd,]) )
-            print ('[time] Mean : ', "%.2f" % np.mean(svgd_time_final[modelInd,]), ' st.dev : ', "%.2f" % np.std(svgd_time_final[modelInd,]), '\n')
-            print('--------------------------------------------------------------------------------')
-            '''
+                svgd_rmse_final[modelInd,:] = svgd_rmse_final[modelInd,:] + rmseResult / numIter
+                svgd_ll_final[modelInd,:] = svgd_ll_final[modelInd,:] + llResult / numIter
+                svgd_time_final[modelInd,:] = svgd_time_final[modelInd,:] + timeResult / numIter
 
-        print('--------------------------------------------------------------------------------')
-        print('Dataset : ', datasetName)
-        print('[Options] : M=',numParticles, ', m=',m, ', max_iter=', max_iter, ', n_hidden=',n_hidden, ', batch_size=',batch_size)
-        print('--------------------------------------------------------------------------------')
-        for modelInd in range(0,modelNum):
-            print (names[modelInd],' [Average of', numIter, 'runs] : ', max_iters[modelInd], ' iterations')
-            print ('[rmse] Mean : ', "%.4f" % np.mean(svgd_rmse_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_rmse_final[modelInd,]) )
-            print ('[llik] Mean : ', "%.4f" % np.mean(svgd_ll_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_ll_final[modelInd,]) )
-            print ('[time] Mean : ', "%.2f" % np.mean(svgd_time_final[modelInd,]), ' st.dev : ', "%.2f" % np.std(svgd_time_final[modelInd,]), '\n')
+
+                np.save('./periter_subset_1adver_rmseResult_'+datasetName,svgd_rmse_final)
+                np.save('./periter_subset_1adver_llResult_'+datasetName,svgd_ll_final)
+                np.save('./periter_subset_1adver_timeResult_'+datasetName,svgd_time_final)
+
+        #print('--------------------------------------------------------------------------------')
+        #print('Dataset : ', datasetName)
+        #print('[Options] : M=',numParticles, ', m=',m, ', max_iter=', max_iter, ', n_hidden=',n_hidden, ', batch_size=',batch_size)
+        #print('--------------------------------------------------------------------------------')
+        #for modelInd in range(0,modelNum):
+        #    print (names[modelInd],' [Average of', numIter, 'runs] : ', max_iters[modelInd], ' iterations')
+        #    print ('[rmse] Mean : ', "%.4f" % np.mean(svgd_rmse_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_rmse_final[modelInd,]) )
+        #    print ('[llik] Mean : ', "%.4f" % np.mean(svgd_ll_final[modelInd,]), ' st.dev : ', "%.4f" % np.std(svgd_ll_final[modelInd,]) )
+        #    print ('[time] Mean : ', "%.2f" % np.mean(svgd_time_final[modelInd,]), ' st.dev : ', "%.2f" % np.std(svgd_time_final[modelInd,]), '\n')

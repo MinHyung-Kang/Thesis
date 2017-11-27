@@ -2,6 +2,7 @@
 % NUTS: example http://arxiv.org/abs/1111.4246
 
 clear
+N = 10000;
 rng(1);
 
 addpath('./nuts/')
@@ -13,8 +14,10 @@ N = 10000; % number of samples to generate
 a0 = 1; b0 = 1; % hyper-parameters
 
 %% SVGD Options
-MOpts = [10,20,30,50,80,100,150,200,250];
-mOpts = [5,10,10,20,20,20,35,40,50];
+% MOpts = [10,20,30,50,80,100,150,200,250];
+% mOpts = [5,10,10,20,20,20,35,40,50];
+MOpts = [10];
+mOpts = [5];
 maxIter = 3000;  % maximum iteration times
 numTimeSteps = 10; % How many timesteps we want to shows
 maxTrial = 1;% How many trials we want to average over
@@ -132,7 +135,7 @@ titleNames = {'Total Time', 'Estimating mean', 'Estimating covariance', 'Maximum
 yLabels = {'log10 t', 'log10 MSE', 'log10 MSE', 'test statistic'};
 
 MOptsTxt = {'10','20','30','50','80','100','150','200','250'};
-
+%MOptsTxt = {'10'};
 
 for j = 1:4
     if j >= 3

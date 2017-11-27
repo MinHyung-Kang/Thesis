@@ -5,7 +5,7 @@ clear
 % Implemented from Liu, Q. and Wang, D. (2016) Stein Variational Gradient Descent
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-M = 100; % number of particles
+M = 200; % number of particles
 
 % we partition the data into 80% for training and 20% for testing
 train_ratio = 0.8;
@@ -32,8 +32,8 @@ dlog_p  = @(theta,seed)dlog_p_lr(theta, X_train, y_train,batchsize,seed,a0,b0); 
 
 
 %% Define models
-m = 20;
-adverIter = 5;
+m = 40;
+adverIter = 10;
 
 % Common options
 baseModel = getModel('none',-1);                                   % Base Model
@@ -42,7 +42,8 @@ subsetCFModel = getModel('subsetCF',-1, m);                        % Random Subs
 inducedModel = getModel('inducedPoints',-1, m,0);                  % Induced Points
 inducedAdver_yModel = getModel('inducedPoints',-1, m,1,adverIter); % Induced Points - update y
 inducedAdver_hModel = getModel('inducedPoints',-1, m,2,adverIter); % Induced Points - update h
-inducedAdverModel = getModel('inducedPoints',-1, m,3,adverIter);   % Induced Points - update y,h
+inducedAdverModel = getModel('inducedPoints',-1, m,3,adverIter,0.1,true);   % Induced Points - update y,h
+inducedAdverModelBatch = getModel('inducedPoints',-1, m,3,adverIter,0.1,true,m);   % Induced Points - update y,h (batch)
 
 % Induced Points - update y,h; no Additional methods used
 inducedAdverModel_basic = getModel('inducedPoints',-1, m,3,adverIter,0,false);
@@ -54,9 +55,9 @@ inducedAdverModel_justReg2 = getModel('inducedPoints',-1, m,3,adverIter,0.2,fals
 inducedAdverModel_justReg3 = getModel('inducedPoints',-1, m,3,adverIter,0.05,false);
 
 %% Compare options
-maxIter = 3000;  % maximum iteration times
+maxIter = 4000;  % maximum iteration times
 numTimeSteps = 10; % How many timesteps we want to shows
-maxTrial = 5;% How many trials we want to average over
+maxTrial = 10;% How many trials we want to average over
 
 timeStepUnit = maxIter / numTimeSteps;
 %1. Compare subset models
@@ -74,9 +75,8 @@ timeStepUnit = maxIter / numTimeSteps;
 % modelOpts = {baseModel, inducedModel,inducedAdverModel5, inducedAdverModel10};
 % algNames= {'base','IP','AIP(10 iter)','AIP(50 iter)'};
 
-inducedAdverModel20 = getModel('inducedPoints',-1, m,3,20,0.1,true);   % Induced Points - update y,h
-modelOpts = {baseModel, inducedModel,inducedAdverModel20};
-algNames= {'base','IP','AIP(20 iter-only hupdate,uStat,reg)'};
+modelOpts = {baseModel, inducedModel, inducedAdverModel, inducedAdverModelBatch};
+algNames= {'SVGD','Induced Points','Adversarial Induced Points','Adversarial Induced Points (Batch)'};
 
 
 numModels = length(modelOpts);   % How many models we want to try
@@ -140,27 +140,36 @@ results = struct(valNames{1},tVal,valNames{2},acc,valNames{3}, llh);
 
 %% Plot result
 
-figure;
+figure('Position', [100, 100, 800, 600]);
+valNames = {'t','acc','llh'};
 colOpts = {'h-','o-','*-','.-','x-','s-','d-','^-','v-','p-','h-','>-','<-'};
-titleNames = {'Total Time', 'Testing Accuracy', 'Testing LogLikelihood'};
+titleNames = {'Total Time', 'Testing Accuracy', 'Testing Log-Likelihood'};
+yAxisNames = {'log10 t', 'accuracy', 'log-likelihood'};
 plotTime = timeStepUnit * (1:numTimeSteps);
 
 for j = 1:3
-    subplot(1,4,j);
-    hold on;
+    subplot(2,2,j);
     handles = zeros(1, numModels);
     result = results.(valNames{j});
 
     for i = 1:numModels
-       handles(i) = plot(plotTime, result(i,:),colOpts{i});
+        if j == 1
+            handles(i) = semilogy(plotTime, result(i,:),colOpts{i},'LineWidth',1.5);
+        else
+            handles(i) = plot(plotTime, result(i,:),colOpts{i},'LineWidth',1.5);
+        end
+        hold on;
+       %handles(i) = plot(plotTime, result(i,:),colOpts{i});
     end
-    title(sprintf('%s',valNames{j}));
-    xlabel('Iterations');
-    ylabel(valNames{j});
+    set(gca,'FontSize',15);
+    title(sprintf('%s',titleNames{j}),'FontSize',16);
+    xlabel('Iterations','FontSize',16);
+    ylabel(yAxisNames{j},'FontSize',16);
+
 end
 
-subplot(1,4,4);
+subplot(2,2,4);
 axis off;
 leg1 = legend(handles,algNames, 'Orientation','vertical');
 %set(leg1, 'Position',[0.7 0.3 0 0]);
-set(leg1, 'Position',[0.8 0.5 0.05 0.05]);
+set(leg1, 'Position',[0.7 0.3 0.05 0.05], 'FontSize',12);

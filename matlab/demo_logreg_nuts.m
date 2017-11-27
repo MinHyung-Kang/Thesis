@@ -15,6 +15,15 @@ train_ratio = 0.8;
 N = 10000; % number of samples to generate
 a0 = 1; b0 = 1; % hyper-parameters
 
+%%
+
+% dataset = benchmarks{2};
+% bm = eval(dataset);
+% X = bm.x; Y = bm.t;
+% %%
+% [coeff,score,latent] = pca(X);
+% scatter3(score(:,1),score(:,2),score(:,3),[],Y);
+
 
 %% SVGD Options
 MOpts = [10,20,30,50,80,100,150,200,250];
@@ -152,13 +161,14 @@ end
 
 return;  % EARLY STOP HERE
 %% Plot the results (only mmd and time)
-figure('Position', [100, 100, 800, 250]);
+%figure('Position', [100, 100, 1200, 400]);
+figure('Position', [100, 100, 1000, 300]);
 %figure;
 optNum = 9;
+algNames = {'SVGD        ','Random Subset        ', 'Random Subset + Control Functional', ...
+    'Random Induced Points', 'Adversarial Induced Points','Adversarial Induced Points (Batch)'};
 %algNames = {'SVGD','Random Subset', 'Random Subset + Control Functional', ...
-%    'Induced Points', 'Adversarial Induced Points (10 updates)'};
-algNames = {'SVGD','Random Subset', 'Random Subset + Control Functional', ...
-    'Induced Points', 'Adversarial Induced Points (10 updates)','Adversarial Induced Points (Batch,10 updates)'};
+%    'Induced Points', 'Adversarial Induced Points (10 updates)','Adversarial Induced Points (Batch,10 updates)'};
 numModels = length(algNames);
 colOpts = {'h-','o-','*-','.-','x-','s-','d-','^-','v-','p-','h-','>-','<-'};
 titleNames = {'Total Time','Maximum Mean Discrepancy'};
@@ -179,26 +189,30 @@ for j=1:2
     
     for i = 1:numModels
         if j == 1
-            handles(i) = semilogy(1:optNum, result(i,:),colOpts{i});
+            handles(i) = semilogy(1:optNum, result(i,:),colOpts{i},'LineWidth',1.5);
         else
-            handles(i) = plot(1:optNum, result(i,:),colOpts{i});
+            handles(i) = plot(1:optNum, result(i,:),colOpts{i},'LineWidth',1.5);
         end
         hold on;
     end
-    %title(sprintf('%s',titleNames{j}),'FontSize',14);
-    xlabel('Sample Size (N)','FontSize',14);
-    ylabel(yLabels{j},'FontSize',14);
+    set(gca,'FontSize',15);
+    %title(sprintf('%s',titleNames{j}),'FontSize',16);
+    %xlabel('Sample Size (N)','FontSize',16);
+    ylabel(yLabels{j},'FontSize',16);
     set(gca,'Xtick',[1 4 9]);
     set(gca,'XtickLabel',{'10','50','250'});
 end
 
 
-%subplot(1,2,3);
+%subplot(1,3,3);
 %axis off;
-leg1 = legend(handles, algNames, 'Orientation','horizontal');
-%set(leg1, 'Position',[0.7 0.3 0 0]);
-set(leg1, 'Position',[0.4 0.1 0.05 0.05]);
-
+leg1 = legend(handles(1:3), algNames{1:3}, 'Orientation','horizontal');
+leg2 = legend(handles(4:6), algNames{4:6}, 'Orientation','horizontal');
+set(leg1, 'Position',[0.8 0.5 0 0], 'FontSize',12);
+set(leg2, 'Position',[0.8 0.3 0 0], 'FontSize',12);
+% 
+%  
+% columnlegend(3, algNames, 'location', 'southoutside')
 ax1 = axes('Position',[0 0 1 1],'Visible','off');
 axes(ax1) % sets ax1 to current axes
 fileName = text(.025,0.38,datasetName);

@@ -74,22 +74,29 @@ colOpts = {'h-','o-','*-','.-','x-','s-','d-','^-','v-','p-','h-','>-','<-'};
 titleNames = {'Total Time'};
 yLabels = {'log10 t'};
 
-MOptsTxt = ['10','20','50','100','200','250','500','750','1000','1500','2000'];
+MOptsTxt = ['10','20','50','100','200','250','500','750','1000','1500','2000','2500'];
+optNum = 12;
 %MOptsTxt = {'10','20','50','100','200','250','500','750','1000'};
-numModels = 5;
+numModels = 8;
 
+algNames = {'SVGD','Random Subset', 'Random Subset + Control Functional', ...
+'Induced Points', 'Adversarial Induced Points(1 iteration)',...
+'Adversarial Induced Points(Batch, 1 iteration)',...
+'Adversarial Induced Points(5 iteration)', ...
+'Adversarial Induced Points(Batch, 5 iteration)'};
 
 handles = zeros(1, numModels);
 for i = 1:numModels
-    handles(i) = semilogy(1:optNum, t_vals(i,1:optNum),colOpts{i});
+    handles(i) = semilogy(1:optNum, t_vals(i,1:optNum),colOpts{i},'LineWidth',1.5);
     hold on;
 end
-title(sprintf('%s',titleNames{1}));
-xlabel('Sample Size (N)');
-ylabel(yLabels{1});
-set(gca,'Xtick',[1 4 7 9 11]);
-set(gca,'XtickLabel',{'10','100','500', '1000', '2000'});
-leg1 = legend(handles, algNames, 'Orientation','vertical','Location','NorthWest');
+set(gca,'FontSize',15);
+title(sprintf('%s',titleNames{1}),'FontSize',16);
+xlabel('Sample Size (N)','FontSize',16);
+ylabel(yLabels{1},'FontSize',16);
+set(gca,'Xtick',[1 4 7 9 12]);
+set(gca,'XtickLabel',{'10','100','500', '1000', '2500'});
+leg1 = legend(handles, algNames, 'Orientation','vertical','Location','NorthWest','FontSize',12);
 %set(leg1, 'Position',[0.8 0.5 0.05 0.05]);
 %%
 %axis off;
